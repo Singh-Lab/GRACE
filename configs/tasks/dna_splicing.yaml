@@ -1,0 +1,37 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: dna_splicing
+title: Tissue-selective splice-site usage
+domain: dna
+runner: pangolin
+alphabet: ACGT
+target_sign: 1.0
+length: 10001
+K: 2
+steps: 300
+lr: 0.05
+rho: 10.0
+target:
+  name: liver splice-site usage
+  oracle: pangolin:liver
+  units: fraction 0-1, higher is better
+constraints:
+- name: heart usage
+  oracle: pangolin:heart
+  eps: 0.05
+  units: fraction 0-1
+- name: brain usage
+  oracle: pangolin:brain
+  eps: 0.05
+  units: fraction 0-1
+- name: testis usage
+  oracle: pangolin:testis
+  eps: 0.05
+  units: fraction 0-1
+- name: substitution budget
+  oracle: builtin:hamming
+  eps: 30
+  units: substitutions
+active_set_tol: 0.3
+dual_lr: 0.02

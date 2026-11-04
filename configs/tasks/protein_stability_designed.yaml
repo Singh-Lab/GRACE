@@ -1,0 +1,25 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: protein_stability_designed
+title: Mini-protein stability
+domain: protein
+runner: generic
+alphabet: ACDEFGHIKLMNPQRSTVWY
+target_sign: 1.0
+length: 43
+K: 16
+steps: 800
+lr: 0.1
+rho: 0.1
+target:
+  name: proteolysis stability score
+  oracle: target_oracle.pt
+  units: assay score units, higher is better
+constraints:
+- name: net charge
+  oracle: builtin:charge
+  eps: 1.0
+  units: elementary charges
+active_set_tol: 0.3
+dual_lr: 0.05

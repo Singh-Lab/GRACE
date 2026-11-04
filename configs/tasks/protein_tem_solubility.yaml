@@ -1,0 +1,33 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: protein_tem_solubility
+title: TEM-1 beta-lactamase solubility
+domain: protein
+runner: esm
+alphabet: ACDEFGHIKLMNPQRSTVWY
+target_sign: 1.0
+length: 285
+K: 8
+steps: 500
+lr: 0.03
+rho: 10.0
+target:
+  name: yeast-display solubility
+  oracle: esm:tem_solubility
+  units: log2 enrichment, higher is better
+constraints:
+- name: ampicillin-resistance fitness
+  oracle: esm:tem_activity
+  eps: 0.1
+  units: relative
+- name: folding stability
+  oracle: esm:tem_stability
+  eps: 0.1
+  units: kcal/mol
+- name: substitution budget
+  oracle: builtin:hamming
+  eps: 171
+  units: substitutions
+active_set_tol: 0.3
+dual_lr: 0.02

@@ -1,0 +1,25 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: mrna_mrl
+title: 5'UTR translation (MRL)
+domain: rna
+runner: generic
+alphabet: ACGU
+target_sign: 1.0
+length: 50
+K: 16
+steps: 800
+lr: 0.25
+rho: 10.0
+target:
+  name: mean ribosome load
+  oracle: target_oracle.pt
+  units: ribosomes per transcript, higher is better
+constraints:
+- name: folding MFE
+  oracle: constraint_oracle.pt
+  eps: 2.0
+  units: kcal/mol
+active_set_tol: 0.3
+dual_lr: 0.05

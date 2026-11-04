@@ -1,0 +1,17 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+*.egg-info/
+
+# Trained oracles live on Zenodo, never in git.
+models/*
+!models/README.md
+zenodo/
+
+# Run output.
+designs/
+results/
+logs/
+*.out
+*.err

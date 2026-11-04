@@ -1,0 +1,29 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: dna_heatshock
+title: Heat-shock-responsive promoter
+domain: dna
+runner: parm
+alphabet: ACGT
+target_sign: 1.0
+length: 209-384
+K: 8
+steps: 300
+lr: 0.1
+rho: 1.0
+target:
+  name: heat-shock inducibility (heat - control)
+  oracle: parm:induction
+  units: PARM activity-score units, higher is better
+constraints:
+- name: basal (control) activity
+  oracle: parm:control
+  eps: 0.2
+  units: PARM activity-score units
+- name: substitution budget
+  oracle: builtin:hamming
+  eps: 10
+  units: substitutions
+active_set_tol: 0.3
+dual_lr: 0.02

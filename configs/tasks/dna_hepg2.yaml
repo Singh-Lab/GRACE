@@ -1,0 +1,29 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: dna_hepg2
+title: HepG2 enhancer activity
+domain: dna
+runner: dna
+alphabet: ACGT
+target_sign: 1.0
+length: 200
+K: 8
+steps: 500
+lr: 0.01
+rho: 10.0
+target:
+  name: HepG2 activity
+  oracle: dna_cnn:hepG2
+  units: log2 RNA/DNA, higher is better
+constraints:
+- name: K562 activity
+  oracle: dna_cnn:k562
+  eps: 0.1
+  units: log2 RNA/DNA
+- name: SK-N-SH activity
+  oracle: dna_cnn:sknsh
+  eps: 0.1
+  units: log2 RNA/DNA
+active_set_tol: 0.3
+dual_lr: 0.02

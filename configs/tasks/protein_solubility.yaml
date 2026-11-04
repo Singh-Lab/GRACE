@@ -1,0 +1,25 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: protein_solubility
+title: Protein solubility
+domain: protein
+runner: generic
+alphabet: ACDEFGHIKLMNPQRSTVWY
+target_sign: 1.0
+length: 40
+K: 16
+steps: 800
+lr: 0.2
+rho: 1.0
+target:
+  name: eSOL solubility score
+  oracle: target_oracle.pt
+  units: dataset score units, higher is better
+constraints:
+- name: net charge
+  oracle: builtin:charge
+  eps: 0.5
+  units: elementary charges
+active_set_tol: 0.3
+dual_lr: 0.05

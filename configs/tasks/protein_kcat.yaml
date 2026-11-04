@@ -1,0 +1,25 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: protein_kcat
+title: Catalytic turnover
+domain: protein
+runner: generic
+alphabet: ACDEFGHIKLMNPQRSTVWY
+target_sign: 1.0
+length: 40
+K: 16
+steps: 800
+lr: 0.1
+rho: 0.1
+target:
+  name: log10 k_cat
+  oracle: target_oracle.pt
+  units: log10(1/s), higher is better
+constraints:
+- name: Kyte-Doolittle hydrophobicity (SUM, not GRAVY)
+  oracle: builtin:hydro
+  eps: 2.0
+  units: summed scale units
+active_set_tol: 0.3
+dual_lr: 0.05

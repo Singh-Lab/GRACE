@@ -1,0 +1,25 @@
+# GRACE benchmark task -- published configuration.
+# K, steps, lr and rho reproduce the paper; change them on the command
+# line with --K/--steps/--lr/--rho to explore other settings.
+key: rna_mfe
+title: RNA folding (MFE)
+domain: rna
+runner: generic
+alphabet: ACGU
+target_sign: -1.0
+length: 40
+K: 16
+steps: 500
+lr: 0.2
+rho: 100.0
+target:
+  name: minimum free energy
+  oracle: target_oracle.pt
+  units: kcal/mol, LOWER is better
+constraints:
+- name: GC fraction
+  oracle: builtin:gc
+  eps: 0.05
+  units: fraction of G+C
+active_set_tol: 0.3
+dual_lr: 0.05

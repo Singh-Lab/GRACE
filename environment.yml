@@ -1,0 +1,14 @@
+name: grace
+channels: [pytorch, conda-forge, bioconda]
+dependencies:
+  - python=3.10
+  - pytorch>=2.0
+  - numpy>=1.24
+  - pandas>=2.0
+  - pyyaml>=6.0
+  - scipy>=1.10
+  - viennarna>=2.6          # RNA folding tasks
+  - pip
+  - pip:
+      - botorch>=0.9        # --method bayesopt
+      - fair-esm>=2.0       # TEM-1 tasks

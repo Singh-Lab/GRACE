@@ -1,0 +1,16 @@
+# Core. Pinned loosely: any 2.x PyTorch reproduces the paper's numbers.
+torch>=2.0,<3
+numpy>=1.24,<3
+pandas>=2.0
+pyyaml>=6.0
+scipy>=1.10
+
+# Bayesian-optimisation baseline only (`--method bayesopt`).
+botorch>=0.9 ; extra == "baselines"
+gpytorch>=1.11 ; extra == "baselines"
+
+# RNA folding labels and the MFE task's reference values.
+ViennaRNA>=2.6 ; extra == "rna"
+
+# TEM-1 (ESM-2) tasks only.
+fair-esm>=2.0 ; extra == "protein-lm"
