@@ -1,16 +1,31 @@
-# Core. Pinned loosely: any 2.x PyTorch reproduces the paper's numbers.
+# Everything needed to run all 10 methods on the 11 tasks that work out of the
+# box. Pinned loosely: any 2.x PyTorch reproduces the paper's numbers.
+#
+# An earlier version of this file marked the optional groups with
+# `; extra == "baselines"`. That marker is package metadata; in a requirements
+# file pip evaluates it with extra='' and skips the line without warning, so
+# `--method bayesopt` quietly failed after a documented install.
 torch>=2.0,<3
 numpy>=1.24,<3
 pandas>=2.0
 pyyaml>=6.0
 scipy>=1.10
+tqdm>=4.60          # the enhancer (DNA CNN) backend imports it at module level
 
-# Bayesian-optimisation baseline only (`--method bayesopt`).
-botorch>=0.9 ; extra == "baselines"
-gpytorch>=1.11 ; extra == "baselines"
+# --method bayesopt
+botorch>=0.9
+gpytorch>=1.11
 
-# RNA folding labels and the MFE task's reference values.
-ViennaRNA>=2.6 ; extra == "rna"
+# make test
+pytest>=7.0
 
-# TEM-1 (ESM-2) tasks only.
-fair-esm>=2.0 ; extra == "protein-lm"
+# ---------------------------------------------------------------------------
+# Not installed by default; each is needed for one task family only.
+#
+#   fair-esm>=2.0        TEM-1 activity / solubility, with the 3.8 GB `esm/`
+#                        bundle. See docs/TASKS.md.
+#   pangolin             dna_splicing, plus a reference genome. Install from
+#                        https://github.com/tkzeng/Pangolin
+#
+# The PARM model class, needed by dna_heatshock, is a git clone rather than a
+# pip package; see docs/TASKS.md.

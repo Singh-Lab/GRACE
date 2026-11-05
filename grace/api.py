@@ -18,7 +18,7 @@ import tempfile
 from dataclasses import dataclass, asdict
 from pathlib import Path
 
-from .registry import MODEL_DIR, Task, TaskError, load_task
+from .registry import MODEL_DIR, PREFIXED_RUNNERS, Task, TaskError, load_task
 
 MODEL_DIR_DNA = MODEL_DIR / "dna_cnn"
 
@@ -40,6 +40,50 @@ METHODS = {
 }
 
 
+def _method_budget(method: str, G: int, m: int) -> int:
+    """Translate the shared call budget G into the units each method spends in.
+
+    Every method is given G = steps x K x (1+m) predictor calls, GRACE's own
+    spend, but they consume a budget argument in different units, so passing G
+    verbatim does not match them. These are the conversions from the paper's
+    budget-matching pass (reports/2026-11-03_matched_budget_n15.md), each
+    derived from how that mode actually calls the oracles in _core.py:
+
+      GRACE / ablations / soft penalty / FastSeqProp
+          G, by construction -- same steps and K.
+      Random search
+          G/(1+m) draws: one consider() per draw.
+      Simulated annealing
+          G/(2+m) steps: one consider() plus one target-only acceptance call.
+      AdaLead
+          64G / (128(1+m) + 160): budget//64 rounds, each up to 128 children at
+          (1+m) calls, then a pool of <=160 sorted on the target alone.
+      Directed evolution
+          has no candidate budget at all; it is capped with --max_evals G
+          instead (see optimize(), which also passes --shuffle_scan).
+      Bayesian optimisation
+          not matched. Its implementation caps acquisition iterations at
+          min(max(G,150) - 20, 180) because refitting the exact GP dominates
+          the cost, so it evaluates 150-200 candidates whatever it is given.
+          docs/BASELINES.md states this exception.
+
+    These assume the published step counts. AdaLead in particular spends its
+    budget in rounds of 64, and its population only reaches full width after
+    the first round, so at a G small enough to buy one round (roughly
+    --steps 25 on a one-constraint task) it underspends badly. That is a
+    property of running a population method at a toy budget, not of the
+    conversion; at the published settings it reads 54-66% on the consider()
+    counter, which the target-only selection calls bring back to ~100%.
+    """
+    if method == "random":
+        return max(1, round(G / (1 + m)))
+    if method == "simulated_annealing":
+        return max(1, round(G / (2 + m)))
+    if method == "adalead":
+        return max(64, round(64 * G / (128 * (1 + m) + 160)))
+    return G
+
+
 @dataclass
 class Design:
     """The result of one run."""
@@ -53,11 +97,13 @@ class Design:
     gain: float                    # target - start_target, oriented so higher is better
     edits: int                     # substitutions from the start
     identity: float                # % positions matching the start
-    feasible: bool                 # every constraint inside its tolerance
+    feasible: bool                 # a feasible improvement was found (else the
+                                   # start is returned unchanged and gain is 0)
     constraint_start: list         # c_j(x_0)
     tolerances: list               # eps_j actually used
     n_oracle_calls: int
     steps: int
+    tolerance_scale: float = 1.0   # the multiplier applied to the published eps
 
     def to_json(self, path) -> None:
         Path(path).write_text(json.dumps(asdict(self), indent=2))
@@ -124,7 +170,7 @@ def optimize(task_key: str, *, start=1, sequence=None, method="grace", seed=42,
             + "\n  ".join(missing)
             + f"\nDownload them with `bash scripts/download_models.sh {task.key}` "
               "or see models/README.md.")
-    if task.runner not in ("generic", "dna"):
+    if task.runner not in ("generic", "dna") and task.runner not in PREFIXED_RUNNERS:
         raise TaskError(
             f"{task.key} runs through the '{task.runner}' backend, which needs weights "
             f"we cannot redistribute. See docs/TASKS.md for how to set it up.")
@@ -138,14 +184,21 @@ def optimize(task_key: str, *, start=1, sequence=None, method="grace", seed=42,
     steps = steps or task.steps
     K = K or task.K
     eps = _tolerances(task, tolerance, tolerance_scale)
-    budget = budget or steps * K * (1 + len(task.constraints))
+    G = budget or steps * K * (1 + len(task.constraints))
+    budget = _method_budget(method, G, len(task.constraints))
 
     if task.runner == "dna":
-        return _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, budget,
-                        keep_raw, quiet, active_set_tol)
+        if len(set(eps)) > 1:
+            raise TaskError(
+                f"{task.key} runs through the DNA backend, which applies one "
+                f"tolerance to every constraint. You asked for "
+                f"{', '.join(str(e) for e in eps)}. Pass a single --tolerance, or "
+                f"use --tolerance-scale to move them together.")
+        return _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, G,
+                        keep_raw, quiet, active_set_tol, tolerance_scale)
 
     argv = [
-        "--target_oracle", str(task.model_dir / task.target["oracle"]),
+        "--target_oracle", task.resolve_oracle(task.target["oracle"]),
         "--wt", wt,
         "--alphabet", task.alphabet,
         "--target_sign", str(task.target_sign),
@@ -158,15 +211,17 @@ def optimize(task_key: str, *, start=1, sequence=None, method="grace", seed=42,
         "--active_set_tol", str(task.active_set_tol if active_set_tol is None
                                 else active_set_tol),
         "--budget", str(budget),
-        "--max_evals", str(budget),
+        "--max_evals", str(G),
         "--seed", str(seed),
         "--eps", str(eps[0]),
         "--eps_list", ",".join(str(e) for e in eps),
     ]
+    if method == "directed_evolution":
+        # without this the --max_evals cap lands on the N-terminus every time
+        argv.append("--shuffle_scan")
     if task.constraints:
         argv += ["--constraint_oracles"] + [
-            c.oracle if c.is_builtin else str(task.model_dir / c.oracle)
-            for c in task.constraints]
+            task.resolve_oracle(c.oracle) for c in task.constraints]
 
     with tempfile.TemporaryDirectory() as tmp:
         raw = Path(keep_raw) if keep_raw else Path(tmp) / "run.json"
@@ -181,23 +236,30 @@ def optimize(task_key: str, *, start=1, sequence=None, method="grace", seed=42,
 
     design = r.get("best_feasible_seq") or wt
     edits = sum(a != b for a, b in zip(design, wt))
+    # A run that never saw a feasible improvement writes null here; the contract
+    # is that the start comes back unchanged with gain 0, not that we crash.
+    start_target = float(r["wt_target"])
+    raw_best = r.get("best_feasible_target")
+    found = raw_best is not None
+    target = float(raw_best) if found else start_target
     return Design(
         task=task.key, method=method, seed=seed, start_sequence=wt,
         sequence=design,
-        start_target=float(r["wt_target"]), target=float(r["best_feasible_target"]),
-        gain=float(r["best_feasible_target"]) - float(r["wt_target"]),
+        start_target=start_target, target=target,
+        gain=target - start_target,
         edits=edits, identity=100.0 * (1 - edits / len(wt)),
-        feasible=design != wt or float(r["best_feasible_target"]) > float(r["wt_target"]),
+        feasible=found and (design != wt or target > start_target),
         constraint_start=r.get("c0", []), tolerances=eps,
-        n_oracle_calls=int(r.get("n_evals", 0)), steps=steps)
+        n_oracle_calls=int(r.get("n_evals", 0)), steps=steps,
+        tolerance_scale=tolerance_scale)
 
 
 #: DNA enhancer modes. The DNA runner names two of them differently.
 _DNA_MODES = dict(METHODS, adalead="adalead", bayesopt="botorch_baseline")
 
 
-def _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, budget,
-             keep_raw, quiet, active_set_tol):
+def _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, G,
+             keep_raw, quiet, active_set_tol, tolerance_scale=1.0):
     """The three enhancer tasks run through the DNA CNN backend.
 
     Its result schema differs from the generic runner's, so the fields are read
@@ -220,7 +282,7 @@ def _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, budget,
         "--alm_dual_lr", str(task.dual_lr),
         "--active_set_tol", str(task.active_set_tol if active_set_tol is None
                                 else active_set_tol),
-        "--max_queries", str(budget),
+        "--max_queries", str(G),
         "--seed", str(seed),
     ]
     with tempfile.TemporaryDirectory() as tmp:
@@ -248,4 +310,5 @@ def _run_dna(task, wt, method, seed, steps, K, lr, rho, eps, budget,
         start_target=start_target, target=float(best), gain=float(best) - start_target,
         edits=edits, identity=100.0 * (1 - edits / len(wt)), feasible=found,
         constraint_start=[c0.get(c, None) for c in cells[1:]], tolerances=eps,
-        n_oracle_calls=int(r.get("n_queries") or r.get("n_evals") or 0), steps=steps)
+        n_oracle_calls=int(r.get("n_queries") or r.get("n_evals") or 0), steps=steps,
+        tolerance_scale=tolerance_scale)

@@ -29,7 +29,8 @@ The target is always stated so that **higher is better**; two tasks
 
 `K`, `steps`, `lr` and `rho` are the published settings and are the defaults.
 Shared across every task: active-set threshold 0.3, projection damping 1e-6,
-multiplier clipping [0, 100], dual step 0.05 (0.02 on TEM-1 and the enhancers).
+multiplier clipping [0, 100], dual step 0.05 (0.02 on TEM-1 and on every
+DNA task: the three enhancers, heat shock and splicing).
 
 Hyperparameters were selected on the **first 5** of the 30 starting sequences.
 The remaining 25 are held out and were never used for tuning.
@@ -44,18 +45,50 @@ constrained properties sit in intermediate percentile bands so the constraint
 binds without starting at an extreme. Consecutive starts are at least
 `max(5, L/3)` substitutions apart.
 
-Two tasks have genomic starts instead:
+Two tasks were selected from genomic loci rather than a library:
 
 - **`dna_heatshock`** — 30 promoters from the GSE301246 held-out test set.
   Basal activity between the 60th and 95th percentile of eligible test
   promoters, predicted inducibility below its 70th percentile, one promoter per
   gene, separated loci. **Coordinates are hg19.** Extracting the same MH4
   fragments against hg38 produces an oracle that appears to train normally and
-  reaches Pearson 0.07 against measured activity.
+  reaches Pearson 0.07 against measured activity. The 30 extracted promoter
+  sequences ship in `data/starts/dna_heatshock.txt`, so you do not need the
+  genome to run this task.
 - **`dna_splicing`** — 48 canonical splice sites on Pangolin's held-out human
   chromosomes 1, 3, 5, 7, 9, one per gene, measured liver usage in [0.2, 0.8].
   Each carries 10,001 bp of context; a ±500 bp window is editable, the splice
   core and its immediate flanks are frozen, leaving 993 mutable positions.
+  Starting sequences are **not** shipped: each is a 10 kb genomic interval, and
+  redistributing 48 of them means redistributing the reference genome. This
+  task is the one benchmark entry you cannot reproduce from this artifact
+  alone; see below.
+
+## What runs out of the box
+
+| | Tasks | Needs |
+|---|---|---|
+| Runs after `download_models.sh` | the 3 RNA, the 3 enhancers, the 4 CNN protein tasks, and `dna_heatshock` — **11 of 14** | the default model bundle; heat shock additionally needs the PARM model class (below) |
+| Needs a larger download | `protein_tem_activity`, `protein_tem_solubility` | the `esm/` bundle (3.8 GB of fine-tuned ESM-2 weights) plus `pip install fair-esm` |
+| Not reproducible from this artifact | `dna_splicing` | the Pangolin package and weights, a reference genome, and the 48 genomic intervals |
+
+**PARM model class** (for `dna_heatshock`). The weights are ours and ship in the
+bundle under `parm/`; the network class is PARM's own and we do not
+redistribute it:
+
+```bash
+git clone https://github.com/vansteensellab/PARM third_party/PARM
+export PARM_REPO=$PWD/third_party/PARM
+```
+
+**ESM-2 oracles** (for the two TEM-1 tasks). Fetch the `esm/` directory from the
+Zenodo record into your `GRACE_MODELS` directory, then `pip install fair-esm`.
+The two tasks share one 285-aa reference sequence rather than 30 starts, so
+`--start all` gives a single run per seed.
+
+**Pangolin** (for `dna_splicing`). Install from
+<https://github.com/tkzeng/Pangolin>, fetch a reference genome, and extract the
+48 intervals. We do not ship an extraction script.
 
 ## Oracles and data
 

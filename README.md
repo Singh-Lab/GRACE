@@ -11,7 +11,9 @@ the part of the target gradient that would break an active constraint, and an
 augmented Lagrangian that corrects whatever violation is left.
 
 This repository contains the method, the 14-task benchmark, every baseline, and
-the scripts that reproduce the paper's tables.
+the scripts that reproduce the paper's tables. Eleven of the fourteen tasks run
+from the default model bundle; the two TEM-1 tasks need a 3.8 GB ESM-2 download
+and splicing needs Pangolin plus a reference genome (see `docs/TASKS.md`).
 
 ---
 
@@ -25,7 +27,13 @@ bash scripts/download_models.sh                                 # trained oracle
 ```
 
 Python 3.10+, PyTorch 2.x. CPU is enough for every task except TEM-1 (ESM-2)
-and the heat-shock promoter (PARM), which want a GPU.
+and the heat-shock promoter (PARM), which want a GPU. Heat shock also needs
+PARM's model class, which is a git clone rather than a pip package:
+
+```bash
+git clone https://github.com/vansteensellab/PARM third_party/PARM
+export PARM_REPO=$PWD/third_party/PARM
+```
 
 Check what you have:
 
@@ -136,7 +144,10 @@ every oracle frozen before optimisation begins.
 | Protein | `protein_tem_activity` | TEM-1 activity | solubility, stability ±0.1 |
 | Protein | `protein_tem_solubility` | TEM-1 solubility | activity, stability ±0.1 |
 
-Each task ships 30 benchmark starting sequences in `data/starts/`, chosen near
+Each task ships 30 benchmark starting sequences in `data/starts/` — except the
+two TEM-1 tasks, which share a single wild-type reference, and `dna_splicing`,
+whose starts are 10 kb genomic intervals and are not redistributed. They are
+chosen near
 the 25th percentile of the target so there is room to improve, with the
 constrained properties in intermediate percentile bands so the constraint is
 informative. `docs/TASKS.md` gives the dataset, split, held-out accuracy and
@@ -169,13 +180,15 @@ baseline is given the same `G`. Each run records what it actually spent in
 ## Reproducing the paper
 
 ```bash
-python scripts/reproduce.py --table main          # main results, 14 tasks
-python scripts/reproduce.py --table trajectory    # feasibility / retention / violation
+python scripts/reproduce.py --table main          # main results
 python scripts/reproduce.py --table tolerance     # the 0.5x - 2x tolerance sweep
 ```
 
-These submit one job per (task, method, start, seed). On a single machine use
-`--dry-run` first: the full grid is around 10,000 runs.
+`--table main` covers the tasks whose models are present: 11 of 14 with the
+default bundle, 13 with the ESM-2 download. Runs happen locally in a thread
+pool; `--slurm` submits them as one array job instead, and `--jobs` sets the
+local pool size. Use `--dry-run` first to see the grid size — `main` is about
+6,500 runs at 11 tasks.
 
 ---
 
@@ -206,12 +219,17 @@ the change reaches the CLI, the Python API and the reproduction scripts at once.
 
 Trained oracles are on Zenodo (DOI: *to be assigned*) and are **not** in this
 repository. `scripts/download_models.sh` fetches and verifies them against
-`models/MANIFEST.sha256`. The bundle is about 425 MB, most of it the three DNA
-enhancer CNNs; `scripts/download_models.sh protein_canya` fetches one task.
+`models/MANIFEST.sha256`. The default bundle is about 575 MB — most of it the
+three DNA enhancer CNNs, which ship their train/valid/test splits alongside the
+weights — plus 44 MB of PARM promoter ensembles for heat shock.
+`scripts/download_models.sh protein_canya` fetches one task.
 
-Two sets of weights we cannot redistribute: Pangolin (install the package and
-use its released weights) and ESM-2 (our fine-tuned heads are on Zenodo, the
-base model comes from `facebook/esm2_t33_650M_UR50D`).
+Larger and separate: the `esm/` directory, 3.8 GB of fine-tuned ESM-2 heads for
+the two TEM-1 tasks.
+
+Two things we do not redistribute at all: Pangolin (install the package and use
+its released weights) and PARM's model class (clone it, as above). The ESM-2
+base model comes from `facebook/esm2_t33_650M_UR50D`.
 
 Three things silently change the results if you miss them, so they are worth
 repeating here:

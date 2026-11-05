@@ -16,8 +16,13 @@ def net_charge(seq):
 
 
 def hydrophobicity(seq):
-    """Mean Kyte-Doolittle hydropathy."""
-    return sum(KD.get(a, 0.0) for a in seq) / len(seq)
+    """SUM of Kyte-Doolittle hydropathy, which is what the kcat task constrains.
+
+    Not the GRAVY average: dividing by length rescales the tolerance by a factor
+    of L (40 on that task). `BuiltinOracle('hydro')` in _core.py is the live
+    version and also returns the sum.
+    """
+    return sum(KD.get(a, 0.0) for a in seq)
 
 
 def gc_fraction(seq):

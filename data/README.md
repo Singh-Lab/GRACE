@@ -20,10 +20,13 @@ than free sequences:
 - `dna_splicing` — 48 splice sites on Pangolin's held-out chromosomes 1, 3, 5,
   7 and 9, with 10,001 bp of context each.
 
-`docs/TASKS.md` gives the extraction recipe for both.
+`dna_heatshock`'s 30 promoter sequences ship in `data/starts/`, so it needs no
+extraction. `dna_splicing`'s do not: see `docs/TASKS.md`.
 
 ## Training data
 
-The datasets behind the oracles are not redistributed here; each one keeps the
-licence of its original publication. `docs/TASKS.md` names the source, the
-accession and the split for every task.
+Training data is not in this repository. One exception travels with the model
+bundle rather than with the code: `dna_cnn/<cell>/` ships the lentiMPRA
+train/valid/test splits next to each enhancer CNN, so the oracles can be
+retrained. Every dataset keeps the licence of its original publication;
+`docs/TASKS.md` names the source, the accession and the split for every task.

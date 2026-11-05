@@ -22,12 +22,15 @@ STARTS_DIR = ROOT / "data" / "starts"
 #: model directory outside the repository (see models/README.md).
 MODEL_DIR = Path(os.environ.get("GRACE_MODELS", ROOT / "models"))
 
-#: Runners that need third-party weights or packages we cannot redistribute.
+#: Runners that need weights or packages beyond the default bundle.
 EXTERNAL_RUNNERS = {
-    "esm": "ESM-2 fine-tuned oracles (Zenodo record, `esm/`)",
-    "parm": "PARM promoter-activity ensembles (Zenodo record, `parm/`)",
+    "esm": "ESM-2 fine-tuned oracles (Zenodo record, `esm/`, 3.8 GB)",
     "pangolin": "the Pangolin package and its released weights",
 }
+
+#: Runners that go through the generic core but prefix their oracle names.
+#: `parm:induction` resolves to <GRACE_MODELS>/parm/induction.pt.
+PREFIXED_RUNNERS = {"parm"}
 
 
 class TaskError(RuntimeError):
@@ -67,7 +70,23 @@ class Task:
     # ---------------------------------------------------------------- paths
     @property
     def model_dir(self) -> Path:
+        if self.runner in PREFIXED_RUNNERS:
+            return MODEL_DIR / self.runner
         return MODEL_DIR / self.key
+
+    def resolve_oracle(self, spec: str) -> str:
+        """Turn a config oracle string into what the core expects.
+
+        `builtin:*` passes through; `parm:induction` becomes
+        `parm:<models>/parm/induction.pt`; anything else is a file in the
+        task's own model directory.
+        """
+        if spec.startswith("builtin:"):
+            return spec
+        for pref in PREFIXED_RUNNERS:
+            if spec.startswith(pref + ":"):
+                return f"{pref}:{MODEL_DIR / pref / (spec.split(':', 1)[1] + '.pt')}"
+        return str(self.model_dir / spec)
 
     @property
     def starts_file(self) -> Path:
@@ -92,6 +111,12 @@ class Task:
     # ----------------------------------------------------------- readiness
     def missing_models(self) -> list[str]:
         """Model files this task needs that are not on disk."""
+        if self.runner in PREFIXED_RUNNERS:
+            want = {o.split(":", 1)[1] for o in
+                    [self.target["oracle"]] + [c.oracle for c in self.constraints]
+                    if o.startswith(self.runner + ":")}
+            return [f"{self.runner}/{w}.pt" for w in sorted(want)
+                    if not (MODEL_DIR / self.runner / f"{w}.pt").exists()]
         if self.runner == "generic":
             want = [self.target["oracle"]] + [c.oracle for c in self.constraints
                                               if not c.is_builtin]
@@ -111,7 +136,7 @@ class Task:
                 return True
             except ImportError:
                 return False
-        return (MODEL_DIR / {"esm": "esm", "parm": "parm"}[self.runner]).is_dir()
+        return (MODEL_DIR / "esm").is_dir()
 
     def describe(self) -> str:
         cons = "\n".join(

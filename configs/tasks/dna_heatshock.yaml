@@ -9,7 +9,7 @@ alphabet: ACGT
 target_sign: 1.0
 length: 209-384
 K: 8
-steps: 300
+steps: 600
 lr: 0.1
 rho: 1.0
 target:

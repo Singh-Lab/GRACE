@@ -2,12 +2,12 @@
 """Guided discrete-diffusion baseline for constrained sequence optimization.
 Trains a masked-denoiser prior on the task data, then generates sequences by MaskGIT-style
 iterative refinement with ORACLE classifier-guidance (target ↑) + constraint feasibility guidance.
-Same JSON I/O as optimize_generic.py (best_feasible_target / best_feasible_seq)."""
+Same JSON I/O as _core.py (best_feasible_target / best_feasible_seq)."""
 import argparse, json, sys
 from pathlib import Path
 import numpy as np, pandas as pd, torch, torch.nn as nn, torch.nn.functional as F
 sys.path.insert(0, str(Path(__file__).parent))
-from optimize_generic import Oracle, BuiltinOracle, HammingOracle, make_oracle, onehot, decode
+from _core import Oracle, BuiltinOracle, HammingOracle, make_oracle, onehot, decode
 
 class Denoiser(nn.Module):
     def __init__(self, A, h=128):

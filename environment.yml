@@ -1,5 +1,5 @@
 name: grace
-channels: [pytorch, conda-forge, bioconda]
+channels: [pytorch, conda-forge]
 dependencies:
   - python=3.10
   - pytorch>=2.0
@@ -7,8 +7,12 @@ dependencies:
   - pandas>=2.0
   - pyyaml>=6.0
   - scipy>=1.10
-  - viennarna>=2.6          # RNA folding tasks
+  - tqdm>=4.60            # the enhancer (DNA CNN) backend imports it
+  - pytest>=7.0           # make test
   - pip
   - pip:
-      - botorch>=0.9        # --method bayesopt
-      - fair-esm>=2.0       # TEM-1 tasks
+      - botorch>=0.9      # --method bayesopt
+      - gpytorch>=1.11
+      # Optional, one task family each -- see docs/TASKS.md:
+      #   - fair-esm>=2.0   TEM-1 tasks, with the 3.8 GB `esm/` bundle
+      #   - pangolin        dna_splicing, plus a reference genome

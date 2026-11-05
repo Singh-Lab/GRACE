@@ -72,14 +72,26 @@ def aggregate(outdir):
         print(f"no results under {outdir}", file=sys.stderr)
         return 1
     df = pd.DataFrame(rows)
+    if "tolerance_scale" not in df:
+        df["tolerance_scale"] = 1.0
     # Collapse seeds to their per-start median first: the unit of inference is
-    # the starting sequence, not the run.
-    per_start = (df.groupby(["task", "method", "start_sequence"])["gain"]
-                   .median().reset_index())
-    table = (per_start.pivot_table(index="task", columns="method", values="gain",
-                                   aggfunc="median").round(3))
-    print(table.to_string(na_rep="  --"))
-    print(f"\n{len(df)} runs, {per_start.shape[0]} (task, method, start) cells")
+    # the starting sequence, not the run. The tolerance scale has to stay in the
+    # key, or a sweep collapses into a single number.
+    keys = ["task", "method", "start_sequence", "tolerance_scale"]
+    per_start = df.groupby(keys)["gain"].median().reset_index()
+    scales = sorted(per_start["tolerance_scale"].unique())
+    if len(scales) > 1:
+        for sc in scales:
+            sub = per_start[per_start.tolerance_scale == sc]
+            print(f"\n--- tolerance x{sc}")
+            print(sub.pivot_table(index="task", columns="method", values="gain",
+                                  aggfunc="median").round(3).to_string(na_rep="  --"))
+    else:
+        table = per_start.pivot_table(index="task", columns="method", values="gain",
+                                      aggfunc="median").round(3)
+        print(table.to_string(na_rep="  --"))
+    print(f"\n{len(df)} runs, {per_start.shape[0]} "
+          f"(task, method, start, tolerance) cells")
     return 0
 
 

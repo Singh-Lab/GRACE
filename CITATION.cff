@@ -6,6 +6,9 @@ authors:
   - name: "The GRACE authors"
 license: MIT
 version: 1.0.0
+repository-code: "https://github.com/<org>/grace"
+# doi: 10.5281/zenodo.<record>      # the trained-oracle bundle, once minted
+# date-released: 2026-__-__
 preferred-citation:
   type: conference-paper
   title: "GRACE: Gradient-Resolved Adaptive Constrained Exploration for Biological Sequence Redesign"

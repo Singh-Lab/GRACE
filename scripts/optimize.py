@@ -85,9 +85,26 @@ def main() -> int:
 
     task = load_task(a.task)
     if a.fasta:
-        seqs = [l.strip() for l in Path(a.fasta).read_text().splitlines()
-                if l.strip() and not l.startswith(">")]
-        starts = [(f"seq{i+1}", s) for i, s in enumerate(seqs)]
+        # Records wrap at 60 or 80 columns in most FASTA files, so the lines of
+        # one record have to be joined before the next ">" rather than taken as
+        # separate sequences.
+        starts, name, buf = [], None, []
+        def _flush():
+            if buf:
+                starts.append((name or f"seq{len(starts)+1}", "".join(buf)))
+        for line in Path(a.fasta).read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith(">"):
+                _flush()
+                name = line[1:].split()[0] if len(line) > 1 else None
+                buf = []
+            else:
+                buf.append(line)
+        _flush()
+        if not starts:
+            raise SystemExit(f"No sequences found in {a.fasta}")
     elif a.sequence:
         starts = [("custom", a.sequence)]
     elif a.start == "all":

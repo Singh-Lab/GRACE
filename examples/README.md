@@ -1,6 +1,8 @@
 # Examples
 
-Each file runs end to end once the models are downloaded.
+Each file runs end to end once the models are downloaded. They use paths
+relative to the repository root, so run them from there:
+`bash examples/01_first_design.sh`, not `cd examples && bash 01_...`.
 
 | File | What it shows |
 |---|---|

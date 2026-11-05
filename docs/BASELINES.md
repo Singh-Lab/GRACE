@@ -39,11 +39,24 @@ G = T · K · (1 + m)
 calls, and every baseline is given the same `G` on the same task. Each
 implementation takes its budget in its own units — candidates, draws, steps, an
 evaluation cap — so the value passed to it is whatever makes its call count
-equal `G`, and the achieved count is read back from the run's own counter
-rather than assumed. Every result JSON carries `n_oracle_calls`.
+equal `G`. `grace.api._method_budget` does that conversion:
+
+| method | argument it is given | why |
+|---|---|---|
+| GRACE, its two ablations, soft penalty, Fast SeqProp | `G` | by construction: same steps and `K` |
+| random search | `G/(1+m)` draws | one `consider()` per draw |
+| simulated annealing | `G/(2+m)` steps | one `consider()` plus one target-only acceptance call |
+| AdaLead | `64G / (128(1+m) + 160)` | `budget//64` rounds, each ≤128 children at `(1+m)` calls, then a ≤160 pool sorted on the target alone |
+| directed evolution | no candidate budget; capped with `--max_evals G` | it scans positions until the cap, with `--shuffle_scan` so the cap does not land on the N-terminus |
+
+The achieved count is read back from the run's own counter rather than assumed.
+Every result JSON carries `n_oracle_calls`. Note that the counter only tracks
+calls made through `consider()`, so AdaLead and simulated annealing read low on
+it — adding the target-only selection calls the formulas account for brings
+both back to ~100%.
 
 **Constrained BO is the exception.** Its implementation caps acquisition
-iterations at `min(budget − 20, 180)` because refitting the exact GP dominates
+iterations at `min(max(budget, 150) − 20, 180)` because refitting the exact GP dominates
 its cost, so it evaluates 150–200 candidates whatever budget it is given. It
 runs at its published setting and reports the candidates it actually spent; it
 is not described as budget-matched.
