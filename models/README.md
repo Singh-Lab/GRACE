@@ -1,7 +1,7 @@
 # Trained oracles
 
 The oracles are **not** in this repository. They are on Zenodo
-(DOI: *to be assigned*) and land here:
+(DOI: https://doi.org/10.5281/zenodo.23975030) and land here:
 
 ```
 models/

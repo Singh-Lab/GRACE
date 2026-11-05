@@ -217,7 +217,7 @@ the change reaches the CLI, the Python API and the reproduction scripts at once.
 
 ## Models and data
 
-Trained oracles are on Zenodo (DOI: *to be assigned*) and are **not** in this
+Trained oracles are on Zenodo (DOI: https://doi.org/10.5281/zenodo.23975030) and are **not** in this
 repository. `scripts/download_models.sh` fetches and verifies them against
 `models/MANIFEST.sha256`. The default bundle is about 575 MB — most of it the
 three DNA enhancer CNNs, which ship their train/valid/test splits alongside the
@@ -245,16 +245,6 @@ repeating here:
 
 ---
 
-## Citation
-
-```bibtex
-@inproceedings{grace2026,
-  title     = {GRACE: Gradient-Resolved Adaptive Constrained Exploration
-               for Biological Sequence Redesign},
-  booktitle = {RECOMB},
-  year      = {2026}
-}
-```
 
 ## License
 
