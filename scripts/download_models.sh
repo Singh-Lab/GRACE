@@ -10,7 +10,7 @@
 # is already here.
 set -euo pipefail
 
-ZENODO_RECORD="${GRACE_ZENODO_RECORD:-TBD}"     # set once the DOI is minted
+ZENODO_RECORD="${GRACE_ZENODO_RECORD:-23975030}"   # 10.5281/zenodo.23975030
 BUNDLE="grace-models-v1.0.0"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DEST="${GRACE_MODELS:-$ROOT/models}"
@@ -79,4 +79,4 @@ else
     echo "warning: no MANIFEST.sha256 in $DEST, so nothing was verified" >&2
 fi
 echo "done -> $DEST"
-python3 "$ROOT/scripts/optimize.py" --list | grep -E "^[a-z_]+ |status" | paste - - | sed 's/\t/  /'
+python3 "$ROOT/scripts/optimize.py" --list | grep -E "^[a-z_0-9]+ |status" | paste - - | sed 's/\t/  /'

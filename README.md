@@ -1,252 +1,183 @@
 # GRACE
 
-**Gradient-Resolved Adaptive Constrained Exploration for biological sequence redesign.**
+**Gradient-Resolved Adaptive Constrained Exploration**  
+*Machine-learning-guided biological sequence design under competing property constraints*
 
-GRACE improves one property of a sequence while holding others inside a
-tolerance band around their starting values — stronger enhancer activity in one
-cell type without touching the other two, higher catalytic turnover at constant
-hydrophobicity, lower amyloid nucleation at constant net charge. It combines a
-differentiable relaxation of the sequence, a null-space projection that removes
-the part of the target gradient that would break an active constraint, and an
-augmented Lagrangian that corrects whatever violation is left.
+**Improve the target. Respect the constraints.**
 
-This repository contains the method, the 14-task benchmark, every baseline, and
-the scripts that reproduce the paper's tables. Eleven of the fourteen tasks run
-from the default model bundle; the two TEM-1 tasks need a 3.8 GB ESM-2 download
-and splicing needs Pangolin plus a reference genome (see `docs/TASKS.md`).
+Increasing enzyme activity can compromise solubility. Strengthening an enhancer in one cell type can change its activity in others. Biological sequence design is rarely about optimizing a single property in isolation.
 
----
+GRACE approaches sequence redesign as a **constrained optimization problem**: starting from a reference sequence, it searches for variants with better predicted target performance while keeping other predicted properties within specified tolerances of their reference values.
 
-## Install
+It combines three ideas:
 
-```bash
-git clone https://github.com/<org>/grace.git
-cd grace
-conda env create -f environment.yml && conda activate grace    # or: pip install -r requirements.txt
-bash scripts/download_models.sh                                 # trained oracles, from Zenodo
-```
+1. **Straight-through gradient optimization** to search over discrete protein, DNA, and RNA sequences using differentiable property predictors.
+2. **Null-space projection** to reduce target updates that conflict with currently active constraints.
+3. **An augmented Lagrangian** to respond to constraint violations and guide the search back toward feasibility.
 
-Python 3.10+, PyTorch 2.x. CPU is enough for every task except TEM-1 (ESM-2)
-and the heat-shock promoter (PARM), which want a GPU. Heat shock also needs
-PARM's model class, which is a git clone rather than a pip package:
+The repository includes the GRACE implementation, a **14-task benchmark** spanning proteins, DNA, and RNA, comparison methods, and scripts for reproducing the reported experiments.
+
+**Explore:** [Quick start](#quick-start) · [Example](#redesign-a-sequence) · [Benchmark](#benchmark) · [Reproduce the experiments](#reproducing-the-experiments) · [Models and data](#models-and-data)
+
+## Quick start
 
 ```bash
-git clone https://github.com/vansteensellab/PARM third_party/PARM
-export PARM_REPO=$PWD/third_party/PARM
-```
+git clone https://github.com/Singh-Lab/GRACE.git
+cd GRACE
 
-Check what you have:
+conda env create -f environment.yml
+conda activate grace
 
-```bash
+bash scripts/download_models.sh
 python scripts/optimize.py --list
 ```
 
----
+Python 3.10+ and PyTorch 2.x are required. You can also install Python dependencies with `pip install -r requirements.txt`. Most tasks run on CPU; the TEM-1 (ESM-2) and heat-shock promoter (PARM) tasks are better suited to a GPU. See [Models and data](#models-and-data) for additional dependencies and current model availability.
 
 ## Redesign a sequence
 
-The one command you need:
+For example, search for a protein variant with reduced predicted amyloid nucleation while keeping its net charge close to the starting sequence:
 
 ```bash
 python scripts/optimize.py --task protein_canya --start 1 --out designs/
 ```
 
-```
-protein_canya / grace / seed 42
-  start  -1.8041
-  design -6.3672   gain +4.5631
-  17 substitutions (15.0% identity), feasible
-  6400 oracle calls over 400 steps
-```
+GRACE writes a designed sequence to `designs/protein_canya_grace_start1_seed42.fasta` and a companion JSON file containing its predicted scores, constraint values, and tolerances. The benchmark default seed is 42.
 
-You get `designs/protein_canya_grace_start1_seed42.fasta` and a `.json` beside
-it with the scores, the constraint values and the tolerances actually used.
-
-### Choosing what to redesign
-
-| | |
-|---|---|
-| `--task` | which problem; `--list` prints all 14 with their constraints |
-| `--start N` | benchmark starting sequence *N*, numbered from 1 as in the paper |
-| `--start all` | every benchmark start for that task |
-| `--sequence ACGU...` | your own sequence instead |
-| `--fasta file.fa` | a file of your own sequences |
-
-### Choosing how hard to push
-
-| | |
-|---|---|
-| `--steps` | optimisation steps (default: the task's published value) |
-| `--K` | sequence samples drawn per step |
-| `--lr`, `--rho` | learning rate on the logits, augmented-Lagrangian penalty |
-| `--budget` | hard cap on oracle calls; defaults to `steps x K x (1 + #constraints)` |
-| `--seeds 42,0,8` | run several seeds and keep the best |
-
-### Choosing how tight the constraints are
-
-| | |
-|---|---|
-| `--tolerance 0.5` | absolute tolerance, applied to every constraint |
-| `--tolerance 0.5,0.1` | one value per constraint, in the order `--list` prints them |
-| `--tolerance-scale 0.5` | half the published tolerance, i.e. twice as strict |
-
-Tolerances are **reference-centred**: a constraint is satisfied when
-`|c(x) - c(x₀)| <= eps`, measured against *your* starting sequence, not an
-absolute target. Tightening them is the most informative knob in the whole
-tool — the paper's lead over the baselines is largest when they are tight.
-
-### A worked example
-
-Push a toehold switch's ON state, keep OFF-state leakage within half the
-benchmark tolerance, three seeds, write everything out:
+Want to make the constraints stricter? This example optimizes the ON state of an RNA toehold switch while limiting OFF-state leakage to **half** the benchmark tolerance:
 
 ```bash
 python scripts/optimize.py --task rna_toehold --start all \
-    --tolerance-scale 0.5 --seeds 42,0,8 --out designs/toehold_strict
+    --tolerance-scale 0.5 --seeds 42,0,8 \
+    --out designs/toehold_strict
 ```
 
-### From Python
+### Choose the starting sequence and search settings
+
+| Option | Meaning |
+| --- | --- |
+| `--task protein_canya` | Choose one of the 14 tasks; `--list` shows the full list |
+| `--start 1` or `--start all` | Use one benchmark reference or all available references |
+| `--sequence ACGU...` | Supply your own sequence |
+| `--fasta sequences.fa` | Read input sequences from FASTA |
+| `--tolerance 0.5` | Override the absolute tolerance for all constraints |
+| `--tolerance 0.5,0.1` | Set tolerances separately, in the order shown by `--list` |
+| `--tolerance-scale 0.5` | Multiply the task's default tolerances by 0.5 |
+| `--steps`, `--K`, `--lr`, `--rho` | Control optimization steps, samples, learning rate, and penalty |
+| `--budget` | Cap the total number of predictor calls |
+| `--seeds 42,0,8` | Run multiple random seeds |
+
+Constraints are **reference-centered**. For constraint predictor $c_j$, starting sequence $x_0$, and tolerance $\epsilon_j$, a returned design $x$ is feasible when
+
+$$|c_j(x) - c_j(x_0)| \leq \epsilon_j$$
+
+This means GRACE tries to preserve each auxiliary property's *starting value*, not force it toward a universal optimum. If no feasible improvement is found, the API returns the unchanged starting sequence rather than a constraint-violating design.
+
+### Python API
 
 ```python
 from grace import optimize, list_tasks, load_task
 
-load_task("rna_mfe").describe()        # what the task asks for
-d = optimize("rna_mfe", start=1, tolerance_scale=0.5, steps=500)
-print(d.sequence, d.gain, d.feasible)
-d.to_fasta("design.fasta")
+load_task("rna_mfe").describe()
+design = optimize("rna_mfe", start=1, tolerance_scale=0.5, steps=500)
+
+print(design.sequence, design.gain, design.feasible)
+design.to_fasta("design.fasta")
 ```
 
-`feasible=False` means no feasible improvement was found and your starting
-sequence is handed back unchanged. That is the paper's convention: a method
-never returns something that breaks a constraint.
+## Benchmark
 
----
+GRACE is evaluated on **14 redesign problems**: six protein tasks, five DNA tasks, and three RNA tasks. Each has a target to improve and one or more auxiliary properties to preserve.
 
-## The benchmark
+| Domain | Task | Target to improve | Properties constrained |
+| --- | --- | --- | --- |
+| Protein | `protein_canya` | Lower amyloid nucleation | Net charge |
+| Protein | `protein_kcat` | Catalytic turnover | Hydrophobicity |
+| Protein | `protein_solubility` | Solubility | Net charge |
+| Protein | `protein_stability_designed` | Mini-protein stability | Net charge |
+| Protein | `protein_tem_activity` | TEM-1 activity | Solubility, stability |
+| Protein | `protein_tem_solubility` | TEM-1 solubility | Activity, stability |
+| DNA | `dna_k562` | K562 enhancer activity | HepG2, SK-N-SH activity |
+| DNA | `dna_hepg2` | HepG2 enhancer activity | K562, SK-N-SH activity |
+| DNA | `dna_sknsh` | SK-N-SH enhancer activity | K562, HepG2 activity |
+| DNA | `dna_heatshock` | Heat-shock inducibility | Basal activity, mutation budget |
+| DNA | `dna_splicing` | Liver splice-site usage | Heart/brain/testis usage, mutation budget |
+| RNA | `rna_toehold` | Toehold ON-state output | OFF-state leakage |
+| RNA | `mrna_mrl` | Translation-related ribosome load | Folding free energy |
+| RNA | `rna_mfe` | Lower RNA folding free energy | GC fraction |
 
-14 tasks, each one target property and one to four constrained properties,
-every oracle frozen before optimisation begins.
+Predictors are held fixed during optimization. The benchmark compares methods under the same starting sequences, constraints, and **matched predictor-call budgets**, rather than simply matching iteration counts. Full tolerance values, data sources, and starting-sequence selection rules are in [`docs/TASKS.md`](docs/TASKS.md).
 
-| Domain | Task | Maximise | Subject to |
-|---|---|---|---|
-| RNA | `rna_toehold` | ON-state output | OFF leakage ±0.02 |
-| RNA | `mrna_mrl` | ribosome load | folding MFE ±2.0 kcal/mol |
-| RNA | `rna_mfe` | folding stability (↓ MFE) | GC fraction ±0.05 |
-| DNA | `dna_k562` | K562 enhancer activity | HepG2, SK-N-SH ±0.1 log₂ |
-| DNA | `dna_hepg2` | HepG2 activity | K562, SK-N-SH ±0.1 log₂ |
-| DNA | `dna_sknsh` | SK-N-SH activity | K562, HepG2 ±0.1 log₂ |
-| DNA | `dna_heatshock` | heat-shock inducibility | basal activity ±0.2, ≤10 substitutions |
-| DNA | `dna_splicing` | liver splice-site usage | heart/brain/testis ±0.05, ≤30 substitutions |
-| Protein | `protein_kcat` | log₁₀ k_cat | hydrophobicity ±2.0 |
-| Protein | `protein_solubility` | eSOL score | net charge ±0.5 |
-| Protein | `protein_canya` | ↓ amyloid nucleation | net charge ±1.0 |
-| Protein | `protein_stability_designed` | mini-protein stability | net charge ±1.0 |
-| Protein | `protein_tem_activity` | TEM-1 activity | solubility, stability ±0.1 |
-| Protein | `protein_tem_solubility` | TEM-1 solubility | activity, stability ±0.1 |
-
-Each task ships 30 benchmark starting sequences in `data/starts/` — except the
-two TEM-1 tasks, which share a single wild-type reference, and `dna_splicing`,
-whose starts are 10 kb genomic intervals and are not redistributed. They are
-chosen near
-the 25th percentile of the target so there is room to improve, with the
-constrained properties in intermediate percentile bands so the constraint is
-informative. `docs/TASKS.md` gives the dataset, split, held-out accuracy and
-selection rule for every one.
-
----
-
-## Baselines
-
-Every baseline runs through the same entry point, the same oracles, the same
-starting sequences and the same selection rule, at a **matched budget of
-predictor calls**:
+## Reproducing the experiments
 
 ```bash
+# Run a baseline on the same task
 python scripts/optimize.py --task protein_canya --start 1 --method adalead
+
+# Reproduce the main results
+python scripts/reproduce.py --table main
+
+# Reproduce the tolerance sweep
+python scripts/reproduce.py --table tolerance
 ```
 
-`grace`, `projection_only`, `alm_only` (the two ablations), `soft_penalty`,
-`fastseqprop`, `adalead`, `directed_evolution`, `simulated_annealing`,
-`random`, `bayesopt`. Guided diffusion and Ctrl-DNA have their own drivers;
-see `docs/BASELINES.md`.
+The repository includes GRACE ablations (`projection_only`, `alm_only`) and comparison methods including soft penalties, Fast SeqProp, AdaLead, directed evolution, simulated annealing, random search, and Bayesian optimization. Guided diffusion and Ctrl-DNA have separate drivers; see [`docs/BASELINES.md`](docs/BASELINES.md).
 
-Budget matching is on predictor calls, not steps: a GRACE run with `T` steps,
-`K` samples and `m` constraint oracles spends `G = T·K·(1+m)` calls, and every
-baseline is given the same `G`. Each run records what it actually spent in
-`n_oracle_calls`.
-
----
-
-## Reproducing the paper
-
-```bash
-python scripts/reproduce.py --table main          # main results
-python scripts/reproduce.py --table tolerance     # the 0.5x - 2x tolerance sweep
-```
-
-`--table main` covers the tasks whose models are present: 11 of 14 with the
-default bundle, 13 with the ESM-2 download. Runs happen locally in a thread
-pool; `--slurm` submits them as one array job instead, and `--jobs` sets the
-local pool size. Use `--dry-run` first to see the grid size — `main` is about
-6,500 runs at 11 tasks.
-
----
-
-## Layout
-
-```
-grace/              the package
-  api.py            optimize() -> Design
-  registry.py       task configs, starting sequences, model paths
-  projection.py     null-space projection and active-set selection
-  _core.py          the optimiser, vendored unchanged from the paper's code
-  _core_dna.py      the DNA enhancer runner
-configs/tasks/      one YAML per task: oracles, tolerances, published settings
-data/starts/        30 benchmark starting sequences per task
-models/             trained oracles (downloaded, not in git)
-scripts/            command-line entry points
-docs/               task details, baselines, what was vendored and why
-tests/              smoke tests that run in a couple of minutes
-```
-
-`configs/tasks/*.yaml` is the single source of truth. Nothing in the code
-hard-codes a tolerance, a learning rate or an oracle path — edit the YAML and
-the change reaches the CLI, the Python API and the reproduction scripts at once.
-
----
+**Plan compute resources before a full reproduction.** The main experiment grid is 5,940 runs for the 11 tasks supported by the default model bundle. Use `--dry-run` to inspect the grid, `--jobs` to control local parallelism, or `--slurm` for a Slurm array job. Every run records `n_oracle_calls` for budget-matched comparisons.
 
 ## Models and data
 
-Trained oracles are on Zenodo (DOI: https://doi.org/10.5281/zenodo.23975030) and are **not** in this
-repository. `scripts/download_models.sh` fetches and verifies them against
-`models/MANIFEST.sha256`. The default bundle is about 575 MB — most of it the
-three DNA enhancer CNNs, which ship their train/valid/test splits alongside the
-weights — plus 44 MB of PARM promoter ensembles for heat shock.
-`scripts/download_models.sh protein_canya` fetches one task.
+Pretrained property predictors are archived separately from the source code:
 
-Larger and separate: the `esm/` directory, 3.8 GB of fine-tuned ESM-2 heads for
-the two TEM-1 tasks.
+**[GRACE model archive on Zenodo](https://doi.org/10.5281/zenodo.23975030)** · Version 1.0.0
 
-Two things we do not redistribute at all: Pangolin (install the package and use
-its released weights) and PARM's model class (clone it, as above). The ESM-2
-base model comes from `facebook/esm2_t33_650M_UR50D`.
+```bash
+# Download the complete available bundle (~245 MB compressed)
+bash scripts/download_models.sh
 
-Three things silently change the results if you miss them, so they are worth
-repeating here:
+# Or download just the models for one task
+bash scripts/download_models.sh protein_canya
+```
 
-- **Heat-shock coordinates are hg19.** Extracting the same MH4 fragments against
-  hg38 trains oracles that look healthy and reach Pearson 0.07 against measured
-  activity.
-- **Hydrophobicity is a sum, not a GRAVY average.** The `protein_kcat`
-  constraint is summed Kyte–Doolittle over the window; dividing by length moves
-  the tolerance by a factor of 40.
-- **Compare at matched oracle calls, not matched steps.** Every result file
-  records `n_oracle_calls` for exactly this reason.
+The archive expands to approximately 575 MB and contains model assets for nine components, supporting 11 of the 14 benchmark tasks. The downloader verifies the complete bundle against its SHA-256 manifest.
 
----
+**Additional requirements and limitations:**
 
+- **TEM-1 activity and solubility:** require fine-tuned ESM-2 assets (~3.8 GB) that are **not included in the current Zenodo release**. The ESM-2 base model is `facebook/esm2_t33_650M_UR50D`.
+- **Heat-shock promoters:** additionally require the PARM model class, installed from its source repository:
 
-## License
+  ```bash
+  git clone https://github.com/vansteensellab/PARM third_party/PARM
+  export PARM_REPO=$PWD/third_party/PARM
+  ```
 
-MIT for the code in this repository. The benchmark datasets keep the licences
-of their original publications; `docs/TASKS.md` names the source of each one.
+- **Splicing:** requires Pangolin and a compatible reference genome. The 10 kb genomic starting intervals are not redistributed.
+
+Most benchmark tasks include 30 starting sequences in `data/starts/`; the two TEM-1 tasks share a wild-type reference. See [`docs/TASKS.md`](docs/TASKS.md) for precise sources and setup.
+
+### Details that matter for reproducibility
+
+- **Heat-shock coordinates use hg19.** Using hg38 for the same fragments changes the predictor inputs and results.
+- **Hydrophobicity is summed, not averaged.** The `protein_kcat` constraint uses summed Kyte–Doolittle scores, not GRAVY.
+- **Compare matched oracle calls.** An optimizer step can invoke multiple target and constraint predictors; iteration counts alone are not a fair budget comparison.
+
+## Repository structure
+
+```text
+grace/             Core optimization package and Python API
+configs/tasks/     Task definitions, constraints, and default settings
+data/starts/       Redistributable benchmark starting sequences
+models/            Downloaded model assets and model documentation
+scripts/           Optimization, download, and reproduction entry points
+docs/              Task details, baseline implementations, and provenance
+examples/          Usage examples
+tests/             Smoke tests
+```
+
+Task YAML files in `configs/tasks/` define the predictors, tolerances, and default optimization settings shared by the CLI, Python API, and reproduction scripts.
+
+## Citation and license
+
+If GRACE supports your work, please cite the GRACE study (citation metadata are in [`CITATION.cff`](CITATION.cff)). For the pretrained model artifacts, cite the [Zenodo release](https://doi.org/10.5281/zenodo.23975030).
+
+The repository's source code is released under the [MIT License](LICENSE). Underlying benchmark datasets retain the terms of their original sources; see [`docs/TASKS.md`](docs/TASKS.md).
